@@ -158,6 +158,8 @@ static const NSTimeInterval DEFAULT_TIMEOUT = 240;
     
     [myRequest setHTTPBody: content];
     
+    [myRequest setTimeoutInterval: myTimeout ];
+   
     return (NSURLRequest *)myRequest;
 }
 

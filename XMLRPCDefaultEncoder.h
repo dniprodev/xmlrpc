@@ -6,4 +6,6 @@
     NSArray *myParameters;
 }
 
++ (NSString *)encodeDictionary: (NSDictionary *)dictionary;
+
 @end

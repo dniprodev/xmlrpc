@@ -4,7 +4,7 @@
 
 @interface XMLRPCDefaultEncoder (XMLRPCEncoderPrivate)
 
-- (NSString *)valueTag: (NSString *)tag value: (NSString *)value;
++ (NSString *)valueTag: (NSString *)tag value: (NSString *)value;
 
 #pragma mark -
 
@@ -12,25 +12,19 @@
 
 #pragma mark -
 
-- (NSString *)encodeObject: (id)object;
++ (NSString *)encodeObject: (id)object;
 
-#pragma mark -
++ (NSString *)encodeArray: (NSArray *)array;
 
-- (NSString *)encodeArray: (NSArray *)array;
++ (NSString *)encodeBoolean: (CFBooleanRef)boolean;
 
-- (NSString *)encodeDictionary: (NSDictionary *)dictionary;
++ (NSString *)encodeNumber: (NSNumber *)number;
 
-#pragma mark -
++ (NSString *)encodeString: (NSString *)string omitTag: (BOOL)omitTag;
 
-- (NSString *)encodeBoolean: (CFBooleanRef)boolean;
++ (NSString *)encodeDate: (NSDate *)date;
 
-- (NSString *)encodeNumber: (NSNumber *)number;
-
-- (NSString *)encodeString: (NSString *)string omitTag: (BOOL)omitTag;
-
-- (NSString *)encodeDate: (NSDate *)date;
-
-- (NSString *)encodeData: (NSData *)data;
++ (NSString *)encodeData: (NSData *)data;
 
 @end
 
@@ -52,7 +46,7 @@
 - (NSString *)encode {
     NSMutableString *buffer = [NSMutableString stringWithString: @"<?xml version=\"1.0\"?><methodCall>"];
     
-    [buffer appendFormat: @"<methodName>%@</methodName>", [self encodeString: myMethod omitTag: YES]];
+    [buffer appendFormat: @"<methodName>%@</methodName>", [XMLRPCDefaultEncoder encodeString: myMethod omitTag: YES]];
     
     [buffer appendString: @"<params>"];
     
@@ -62,7 +56,7 @@
         
         while ((parameter = [enumerator nextObject])) {
             [buffer appendString: @"<param>"];
-            [buffer appendString: [self encodeObject: parameter]];
+            [buffer appendString: [XMLRPCDefaultEncoder encodeObject: parameter]];
             [buffer appendString: @"</param>"];
         }
     }
@@ -124,13 +118,41 @@
 #endif
 }
 
++ (NSString *)encodeDictionary: (NSDictionary *)dictionary {
+   NSMutableString * buffer = [NSMutableString string];
+   NSEnumerator *enumerator = [dictionary keyEnumerator];
+   
+   [buffer appendString: @"<value><struct>"];
+   
+   NSString *key = nil;
+   NSObject *val;
+   
+   while (key = [enumerator nextObject]) {
+      [buffer appendString: @"<member>"];
+      [buffer appendFormat: @"<name>%@</name>", [self encodeString: key omitTag: YES]];
+      
+      val = [dictionary objectForKey: key];
+      if (val != [NSNull null]) {
+         [buffer appendString: [self encodeObject: val]];
+      } else {
+         [buffer appendString:@"<value><nil/></value>"];
+      }
+      
+      [buffer appendString: @"</member>"];
+   }
+   
+   [buffer appendString: @"</struct></value>"];
+   
+   return (NSString *)buffer;
+}
+
 @end
 
 #pragma mark -
 
 @implementation XMLRPCDefaultEncoder (XMLRPCEncoderPrivate)
 
-- (NSString *)valueTag: (NSString *)tag value: (NSString *)value {
++ (NSString *)valueTag: (NSString *)tag value: (NSString *)value {
     return [NSString stringWithFormat: @"<value><%@>%@</%@></value>", tag, value, tag];
 }
 
@@ -142,7 +164,7 @@
 
 #pragma mark -
 
-- (NSString *)encodeObject: (id)object {
++ (NSString *)encodeObject: (id)object {
     if (!object) {
         return nil;
     }
@@ -172,7 +194,7 @@
 
 #pragma mark -
 
-- (NSString *)encodeArray: (NSArray *)array {
++ (NSString *)encodeArray: (NSArray *)array {
     NSMutableString *buffer = [NSMutableString string];
     NSEnumerator *enumerator = [array objectEnumerator];
     
@@ -189,37 +211,9 @@
     return (NSString *)buffer;
 }
 
-- (NSString *)encodeDictionary: (NSDictionary *)dictionary {
-    NSMutableString * buffer = [NSMutableString string];
-    NSEnumerator *enumerator = [dictionary keyEnumerator];
-    
-    [buffer appendString: @"<value><struct>"];
-    
-    NSString *key = nil;
-    NSObject *val;
-    
-    while (key = [enumerator nextObject]) {
-        [buffer appendString: @"<member>"];
-        [buffer appendFormat: @"<name>%@</name>", [self encodeString: key omitTag: YES]];
-
-        val = [dictionary objectForKey: key];
-        if (val != [NSNull null]) {
-            [buffer appendString: [self encodeObject: val]];
-        } else {
-            [buffer appendString:@"<value><nil/></value>"];
-        }
-
-        [buffer appendString: @"</member>"];
-    }
-    
-    [buffer appendString: @"</struct></value>"];
-    
-    return (NSString *)buffer;
-}
-
 #pragma mark -
 
-- (NSString *)encodeBoolean: (CFBooleanRef)boolean {
++ (NSString *)encodeBoolean: (CFBooleanRef)boolean {
     if (boolean == kCFBooleanTrue) {
         return [self valueTag: @"boolean" value: @"1"];
     } else {
@@ -227,7 +221,7 @@
     }
 }
 
-- (NSString *)encodeNumber: (NSNumber *)number {
++ (NSString *)encodeNumber: (NSNumber *)number {
     NSString *numberType = [NSString stringWithCString: [number objCType] encoding: NSUTF8StringEncoding];
     
     if ([numberType isEqualToString: @"d"]) {
@@ -237,11 +231,11 @@
     }
 }
 
-- (NSString *)encodeString: (NSString *)string omitTag: (BOOL)omitTag {
++ (NSString *)encodeString: (NSString *)string omitTag: (BOOL)omitTag {
     return omitTag ? [string escapedString] : [self valueTag: @"string" value: [string escapedString]];
 }
 
-- (NSString *)encodeDate: (NSDate *)date {
++ (NSString *)encodeDate: (NSDate *)date {
     unsigned components = kCFCalendarUnitYear | kCFCalendarUnitMonth | kCFCalendarUnitDay | kCFCalendarUnitHour | kCFCalendarUnitMinute | kCFCalendarUnitSecond;
     NSDateComponents *dateComponents = [[NSCalendar currentCalendar] components: components fromDate: date];
     NSString *buffer = [NSString stringWithFormat: @"%.4ld%.2ld%.2ldT%.2ld:%.2ld:%.2ld", (long)[dateComponents year], (long)[dateComponents month], (long)[dateComponents day], (long)[dateComponents hour], (long)[dateComponents minute], (long)[dateComponents second], nil];
@@ -249,7 +243,7 @@
     return [self valueTag: @"dateTime.iso8601" value: buffer];
 }
 
-- (NSString *)encodeData: (NSData *)data {
++ (NSString *)encodeData: (NSData *)data {
     return [self valueTag: @"base64" value: [data base64EncodedString]];
 }
 
